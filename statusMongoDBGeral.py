@@ -358,11 +358,11 @@ def getInfoReplSetStatus():
 def strConnectionDatabaseDestino():
     
     #variaveis de conexao azuresql
-    v_server   = os.getenv("SERVER_TARGET_SQL")
-    v_port     = os.getenv("PORT_TARGET_SQL")
-    v_database = os.getenv("DATABASE_TARGET_SQL")
-    v_username = os.getenv("USERNAME_TARGET_SQL")
-    v_password = os.getenv("PASSWORD_TARGET_SQL")
+    v_server   = getValueEnv("SERVER_TARGET_SQL")
+    v_port     = getValueEnv("PORT_TARGET_SQL")
+    v_database = getValueEnv("DATABASE_TARGET_SQL")
+    v_username = getValueEnv("USERNAME_TARGET_SQL")
+    v_password = getValueEnv("PASSWORD_TARGET_SQL")
 
     strConnection = "Server=tcp:{server},{port};Database={database};Uid={username};PWD={password};Encrypt=yes;TrustServerCertificate=yes;"\
         .format(server = v_server, port = v_port, database = v_database, username = v_username, password = v_password)
