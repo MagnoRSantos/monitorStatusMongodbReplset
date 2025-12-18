@@ -1,0 +1,29 @@
+# Ambientes Virtuais
+venv/
+.venv/
+
+# Variáveis de Ambiente
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs e Arquivos Temporários
+*.log
+*.tmp
+
+# Node.js (se aplicável)
+node_modules/
+
+# VS Code
+.vscode/
+
+# Outros arquivos/pastas de build ou temporários
+build/
+dist/
+log/
+db/

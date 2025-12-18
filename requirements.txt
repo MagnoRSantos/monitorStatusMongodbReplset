@@ -1,0 +1,4 @@
+python-dotenv==1.2.1
+mssql-python==1.0.0
+httplib2==0.31.0
+pymongo==4.15.5
