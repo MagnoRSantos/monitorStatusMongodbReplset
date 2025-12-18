@@ -378,7 +378,7 @@ def gravaDadosDestinoAzureSQL(v_namereplset, v_listReturnMongoDB):
 	try:
     	
 		"""
-		-- Modelo de Criação da tabela de destino no AzureSQL
+		-- Modelo de Criação da tabela de destino no SQL
 		CREATE TABLE [dbo].[monitorStatusMongoDBGeral] (
 			replicasetName VARCHAR(20),
 			version VARCHAR(10),
