@@ -166,6 +166,7 @@ def getInfoServerStatus(v_nameserver, v_namereplset):
 
 	v_uptime = None
 	v_activeSessionsCount = None
+	client
 	
 	try:
 
@@ -250,6 +251,7 @@ def getInfoReplSetStatus():
 
 	listFinal = []
 	v_namereplset = None
+	client = None
 
 	try:
 		## Dados de coinexao mongodb
@@ -374,6 +376,8 @@ def strConnectionDatabaseDestino():
 def gravaDadosDestinoAzureSQL(v_namereplset, v_listReturnMongoDB):
 
 	connString = str(strConnectionDatabaseDestino())
+	cnxn = None
+	cursor = None
 	
 	try:
     	
