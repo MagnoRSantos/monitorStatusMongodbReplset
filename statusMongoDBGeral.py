@@ -166,7 +166,7 @@ def getInfoServerStatus(v_nameserver, v_namereplset):
 
 	v_uptime = None
 	v_activeSessionsCount = None
-	client
+	client = None
 	
 	try:
 
