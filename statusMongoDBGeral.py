@@ -8,6 +8,12 @@ import socket
 import logging
 from mssql_python import connect
 
+from datetime import datetime
+try:
+    from dateutil import parser as _date_parser
+except Exception:
+    _date_parser = None
+
 ## IMPORTS PROPRIOS
 from sendMsgChatGoogle import sendMsgChatGoogle
 from removeLogAntigo import removeLogs
@@ -39,6 +45,44 @@ logging.basicConfig(
 )
 
 #logger = logging.getLogger(__name__)
+
+def normalize_dt(v):
+    """
+    Normaliza v para datetime.
+    - Se v já for datetime, retorna v.
+    - Se for string tenta parsear com dateutil (se disponível) ou com strptime fallback.
+    - Retorna None se não for possível.
+    """
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v
+    s = str(v)
+    # tenta dateutil (mais robusto)
+    if _date_parser:
+        try:
+            return _date_parser.parse(s)
+        except Exception:
+            pass
+    # fallback simples: tenta parsear com seu formatData (ignora micros/offsets)
+    try:
+        # corta fração de segundos e timezone se houver, para compatibilidade
+        base = s.split('.')[0].split('+')[0].split('Z')[0].strip()
+        return datetime.strptime(base, formatData)
+    except Exception:
+        return None
+	
+def calculaAtrasoReplSet(v_primary_optime, v_member_optime):
+    """
+    Calcula diferença em segundos entre primary_optime e member_optime.
+    Recebe valores que podem ser datetime ou strings; usa normalize_dt.
+    Retorna None se não for possível calcular.
+    """
+    dt_primary = normalize_dt(v_primary_optime)
+    dt_member = normalize_dt(v_member_optime)
+    if not dt_primary or not dt_member:
+        return None
+    return int((dt_primary - dt_member).total_seconds())
 
 
 ## funcao de remocao de arquivos de logs antigos
@@ -113,7 +157,7 @@ def getValueEnv(valueEnv):
 	return v_valueEnv
 
 ## calcula diferenca entre datas para obter atraso do replicaset
-def calculaAtrasoReplSet(v_dataInicial, v_optimeDate):
+def calculaAtrasoReplSet_Old(v_dataInicial, v_optimeDate):
 	diffDatas = (datetime.strptime(v_dataInicial, formatData) - datetime.strptime(v_optimeDate, formatData)).total_seconds()
 	return int(diffDatas)
 
@@ -166,6 +210,7 @@ def getInfoServerStatus(v_nameserver, v_namereplset):
 
 	v_uptime = None
 	v_activeSessionsCount = None
+	client = None
 	
 	try:
 
@@ -250,6 +295,7 @@ def getInfoReplSetStatus():
 
 	listFinal = []
 	v_namereplset = None
+	client = None
 
 	try:
 		## Dados de coinexao mongodb
@@ -270,37 +316,38 @@ def getInfoReplSetStatus():
 
 			## novo for members dinamico
 			lista_membros = rs_stats.get("members", [])
-			for n in range(len(lista_membros)):
+
+			# 1) Identifica optimeDate do primary (se houver)
+			primary_optimeDate = None
+			for m in lista_membros:
+				if str(m.get("stateStr")).upper() == "PRIMARY":
+					primary_optimeDate = str(m.get("optimeDate"))
+					logging.info("optimeDate primary: {0}".format(primary_optimeDate))
+					break
+			
+			if primary_optimeDate is None:
+				msgLog = "Nenhum membro PRIMARY encontrado no replicaset."
+				logging.warning(msgLog)
+
+			# 2) Processa cada membro do replicaset
+			for n, member in range(len(lista_membros)):
 				
 				# lista auxiliar para insercao dos dados
 				listAux = []
 				
 				# obtem dados do status do replicaset
 				v_member = str(n)
-				v_name = str(rs_stats["members"][n]["name"])
-				v_stateStr = str(rs_stats["members"][n]["stateStr"])
-				v_syncSourceHost = 'IsPrimary' if str(rs_stats["members"][n]["syncSourceHost"]) == "" else str(rs_stats["members"][n]["syncSourceHost"])
+				v_name = str(member.get("name"))
+				v_stateStr = str(member.get("stateStr", "UNKNOWN"))
+				v_syncSourceHost = 'IsPrimary' if v_stateStr.upper() == 'PRIMARY' else member.get("syncSourceHost") or 'Unknown'
 				
-				## obtem tempo de optimeDate do primario
-				if v_syncSourceHost == 'IsPrimary':
-					dtInicialPrimary = str(rs_stats["members"][n]["optimeDate"])
-					v_optimeDate = dtInicialPrimary
-					v_optimeDate_secs = 0
-					msgLog = "optimeDate primary: {0}".format(dtInicialPrimary)
-					logging.info(msgLog)
-
-				## obtem tempo de optimeDate do replicaset nos secundarios e realiza o calculo do atraso	
-				if v_syncSourceHost != 'IsPrimary':
-					dtInicial = dtInicialPrimary
-					v_optimeDate = str(rs_stats["members"][n]["optimeDate"])
-					msgLog = "optimeDate primary: {0} || optimeDate secondary: {1}".format(dtInicial, v_optimeDate)
-					logging.info(msgLog)
-
-					## calcula atraso do replicaset
-					v_optimeDate_secs = calculaAtrasoReplSet(dtInicial, v_optimeDate)	
+				v_optimeDate = member.get("optimeDate")
+				v_optimeDate_secs = calculaAtrasoReplSet(primary_optimeDate, v_optimeDate)
+				if v_optimeDate_secs is None:
+					v_optimeDate_secs = -1  # Indica que não foi possível calcular o atraso
 
 				## obtem dados do serverStatus
-				dictServerStatus = getInfoServerStatus(v_name, v_namereplset)
+				dictServerStatus = getInfoServerStatus(v_name, v_namereplset) or {}
 
 				# obtem dados do dicionario para variaveis
 				v_uptime = dictServerStatus.get("v_uptime")
@@ -347,9 +394,13 @@ def getInfoReplSetStatus():
 		enviaExceptionGChat(msgLog)
 
 	finally:
-		## fecha conexoes se necessario
-		if client:
-			client.close()
+
+		try:
+			## fecha conexoes se necessario
+			if client:
+				client.close()
+		except Exception as e:
+			pass
 
 		return v_namereplset, listFinal
 
@@ -373,6 +424,8 @@ def strConnectionDatabaseDestino():
 ## FUNCAO DE INSERT DE DADOS NO DATABASE DE DESTINO
 def gravaDadosDestinoAzureSQL(v_namereplset, v_listReturnMongoDB):
 
+	cnxn = None
+	cursor = None
 	connString = str(strConnectionDatabaseDestino())
 	
 	try:
@@ -444,16 +497,20 @@ def gravaDadosDestinoAzureSQL(v_namereplset, v_listReturnMongoDB):
 					) 
 					VALUES 
 					(
-						'{0}', ?, ?, ?, ?, ?, 
+						?, ?, ?, ?, ?, ?, 
 						?, ?, ?, ?, ?, 
 						?, ?, ?, ?, ?,
-						?, ?, ?, ?, '{1}'
+						?, ?, ?, ?, ?
 					);
-				'''.format(v_namereplset, obterDataHora())
+				'''
+				
+				##.format(v_namereplset, obterDataHora())
 
 				RowCount = 0
+				data_coleta = obterDataHora()
 				for params in v_listReturnMongoDB:
-					cursor.execute(sql_insert, params)
+					full_params = [v_namereplset] + params + [data_coleta]
+					cursor.execute(sql_insert, full_params)
 					RowCount = RowCount + cursor.rowcount
 
 			## Commit the transaction 
