@@ -375,9 +375,10 @@ def strConnectionDatabaseDestino():
 ## FUNCAO DE INSERT DE DADOS NO DATABASE DE DESTINO
 def gravaDadosDestinoAzureSQL(v_namereplset, v_listReturnMongoDB):
 
-	connString = str(strConnectionDatabaseDestino())
 	cnxn = None
 	cursor = None
+	connString = str(strConnectionDatabaseDestino())
+
 	
 	try:
     	
